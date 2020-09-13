@@ -15,7 +15,7 @@ ws.on('message', (data) => {
   const parsed = JSON.parse(data);
   switch (parsed.type) {
     case 'plr.move':
-      logger.info(`player ${parsed.plr.id} made move ${parsed.move}`);
+      logger.info(`next made move ${parsed.move}`);
       break;
     case 'plr.join':
       logger.info(`player ${parsed.plr.id} joined`);
@@ -24,10 +24,10 @@ ws.on('message', (data) => {
       logger.info(`player ${parsed.plr.id} disconnected`);
       break;
     case 'game.end':
-      logger.info(`game ended, ${parsed.winner.id} won!`);
+      logger.info(`game ended, ${parsed.winner} won!`);
       break;
     case 'game.start':
-      logger.info(`game start, initial state ${parsed.initialState}`);
+      logger.info('game start');
       break;
     default:
       logger.warn(`No type for\n${parsed}`);
