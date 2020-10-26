@@ -3,10 +3,13 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
+  "subPackages": [
+    "cli-client"
+  ],
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon -r dotenv/config index.js",
-    "start-test-client": "node test-client/index.js",
+    "test-client": "cd cli-client && npm start",
     "pretest": "eslint --ignore-path .gitignore .",
     "test": "ava --verbose",
     "test:coverage": "nyc npm run test",
@@ -41,6 +44,7 @@
     "nodemon": "^2.0.4",
     "nyc": "^15.1.0",
     "sinon": "^9.2.0",
+    "subpackage": "^1.1.0",
     "supertest": "^5.0.0"
   },
   "ava": {
