@@ -1,38 +1,38 @@
-const WebSocket = require('ws');
-const logger = require('../src/logger');
-const { setupRL, getRL } = require('./cli');
+const clear = require('clear');
 
-const WS_PATH = 'ws://localhost:8080';
-const ws = new WebSocket(WS_PATH);
+const welcomeMenu = require('./menus/welcome');
+const mainMenu = require('./menus/main');
 
-ws.on('open', () => {
-  logger.info(`Connection opened with at ${WS_PATH}`);
-  getRL().prompt();
-});
+const MENU_STATES = {};
+MENU_STATES.WELCOME = welcomeMenu(MENU_STATES);
+MENU_STATES.MAIN = mainMenu(MENU_STATES);
+MENU_STATES.EXIT = async () => {
+  console.log('bye!');
+};
 
-ws.on('message', (data) => {
-  logger.info(`Incoming data:\n${data}`);
-  const parsed = JSON.parse(data);
-  switch (parsed.type) {
-    case 'plr.move':
-      logger.info('plr moved.');
-      logger.info(JSON.stringify(parsed.board));
+async function main() {
+  let currentState = MENU_STATES.WELCOME.main;
+
+  /* eslint-disable no-await-in-loop */
+  while (currentState !== MENU_STATES.EXIT) {
+    try {
+      // clear();
+      currentState = await currentState();
+    } catch (error) {
+      if (error.isTtyError) {
+        // Environment doesn't support inquiry library
+      } else {
+        // other error
+      }
+      console.log(error);
       break;
-    case 'plr.join':
-      logger.info(`player ${parsed.plr.id} joined`);
-      break;
-    case 'plr.disconnect':
-      logger.info(`player ${parsed.plr.id} disconnected`);
-      break;
-    case 'game.end':
-      logger.info(`game ended, ${parsed.winner} won!`);
-      break;
-    case 'game.start':
-      logger.info('game start');
-      break;
-    default:
-      logger.warn(`No type for\n${parsed}`);
+    }
   }
-});
+  /* eslint-disable no-await-in-loop */
 
-setupRL(ws);
+  MENU_STATES.EXIT();
+
+  process.exit(0);
+}
+
+main();

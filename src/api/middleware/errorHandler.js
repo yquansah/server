@@ -4,8 +4,6 @@ const HttpStatus = require('http-status-codes');
 module.exports = (err, req, res, next) => {
   res.status(err.status || HttpStatus.INTERNAL_SERVER_ERROR);
   res.json({
-    error: {
-      message: err.message,
-    },
+    message: err.message,
   });
 };
