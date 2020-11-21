@@ -30,7 +30,6 @@ class HttpClient {
 
   async responseErrorInterceptor(error) {
     const originalRequest = error.config;
-    console.log(error);
     if (error.response.status === StatusCodes.UNAUTHORIZED && !originalRequest.accessTokenRetry) {
       originalRequest.accessTokenRetry = true;
       const response = await this.client.get('/users/token', { headers: { Authorization: `Bearer ${this.refreshToken}` } });
@@ -107,7 +106,6 @@ class HttpClient {
         logger.error('Failed to contact server');
       } else {
         logger.error('Client error');
-        console.log(error);
       }
     }
     return {};
