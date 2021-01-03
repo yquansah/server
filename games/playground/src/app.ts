@@ -1,8 +1,9 @@
 import "@babylonjs/core/Debug/debugLayer";
 import "@babylonjs/inspector";
 import "@babylonjs/loaders/glTF";
-import { Engine, Scene, ArcRotateCamera, Vector3, HemisphericLight, Mesh, Color3, MeshBuilder, VectorMergerBlock } from "@babylonjs/core";
-import {SkyMaterial} from "@babylonjs/materials";
+import { Engine, Scene, ArcRotateCamera, Vector3, HemisphericLight, Mesh, Color3, SceneLoader, CannonJSPlugin } from "@babylonjs/core";
+import * as cannon from "cannon"
+import {setupSky} from "./sky"
 // TODO: figure out how to do eslint with formatting white space
 // look into airbnb config
 
@@ -16,36 +17,26 @@ function setupLighting(config, scene){
   ambientLight.intensity = 0.7;
 }
 
-function setupSky(scene){
-  const skyMaterial = new SkyMaterial("skyMaterial", scene);
-  skyMaterial.backFaceCulling = false;
-  // skyMaterial.turbidity = 1
-  // skyMaterial.luminance = 100
-  skyMaterial.useSunPosition = true; // Do not set sun position from azimuth and inclination
-
-  const skybox = Mesh.CreateBox("skyBox", 1000.0, scene);
-  skybox.material = skyMaterial;
-  // skybox.infiniteDistance = true
-  // skybox.renderingGroupId = 0;
-
-
-  // TODO: figure out data structure for stopping and starting skyloop
-  const dayLengthSec = 60 * 5
-  let startTime = Date.now();
-  let angle = 0
-  function skyLoop(){
-    const curTime = Date.now()
-    const diffSec = (curTime - startTime) / 1000
-    startTime = curTime
-    angle += diffSec * 2 * Math.PI / dayLengthSec
-    angle %= 2 * Math.PI
-    skyMaterial.sunPosition = new Vector3(Math.cos(angle), Math.sin(angle), 0)
-  }
-
-  scene.registerAfterRender(skyLoop)
+function setupMap(scene){
+  const ground = Mesh.CreateGround("ground1", 12, 12, 0, scene);
 }
 
-function main() {
+function setupCharacter(scene){
+
+}
+
+function setupCamera(scene, canvas){
+  const camera: ArcRotateCamera = new ArcRotateCamera("Camera", Math.PI / 2, Math.PI / 2, 2, Vector3.Zero(), scene);
+  camera.attachControl(canvas, true);
+
+
+  // TODO NEXT: setup character
+  SceneLoader.ImportMesh("", "./assets/", "Xbot.glb", scene, function onSuccess(newMeshes) {
+
+  })
+}
+
+async function main() {
   // create the canvas html element and attach it to the webpage
   const canvas = document.createElement("canvas");
   canvas.style.width = "100%";
@@ -56,14 +47,7 @@ function main() {
   // initialize babylon scene and engine
   const engine = new Engine(canvas, true);
   const scene = new Scene(engine);
-  const sphere = Mesh.CreateSphere("sphere1", 16, 2, scene);
-  const ground = Mesh.CreateGround("ground1", 12, 12, 0, scene);
-
-  // Move the sphere upward 1/2 its height
-  sphere.position.y = 1;
-
-  const camera: ArcRotateCamera = new ArcRotateCamera("Camera", Math.PI / 2, Math.PI / 2, 2, Vector3.Zero(), scene);
-  camera.attachControl(canvas, true);
+  scene.enablePhysics(new Vector3(20,0,0),new CannonJSPlugin(true, 100, cannon))
 
   // hide/show the Inspector
   window.addEventListener("keydown", (ev) => {
@@ -77,16 +61,16 @@ function main() {
     }
   });
 
-
-
+  setupMap(scene)
+  setupCamera(scene, canvas)
   setupLighting(lightingConfig, scene);
   setupSky(scene)
+  setupCharacter(scene)
 
   // run the main render loop
   engine.runRenderLoop(() => {
     scene.render();
   });
-
 }
 
 main();
