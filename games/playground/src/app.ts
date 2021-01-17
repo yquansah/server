@@ -28,6 +28,19 @@ function setupMap(scene) {
   );
 
   const sky = new Sky(scene);
+
+  const obstacle = MeshBuilder.CreateBox('obstacle', { width: 1, height: 1, depth: 1 }, scene);
+  obstacle.position = new Vector3(4, 0.5, 0);
+  obstacle.showBoundingBox = true;
+  obstacle.physicsImpostor = new PhysicsImpostor(
+    obstacle,
+    PhysicsImpostor.BoxImpostor,
+    {
+      mass: 1,
+      friction: 0.1,
+      restitution: 0.1,
+    }, scene,
+  );
 }
 
 async function main() {
@@ -76,6 +89,8 @@ async function main() {
       } else {
         scene.debugLayer.show();
       }
+    } else if (ev.key === ' ') {
+      character.jump();
     }
     keysPressed[ev.key] = true;
   });
@@ -99,14 +114,17 @@ async function main() {
       }
     });
 
-    character.move(move2DVector[0], move2DVector[1], deltaTimeMs);
+    character.move(move2DVector[0], move2DVector[1], deltaTimeMs, scene);
     character.rotate(mouseXDiff / 1000);
     camera.rotate(mouseYDiff / 1000);
 
-    scene.render();
-
     mouseXDiff = 0;
     mouseYDiff = 0;
+
+    const divFps = document.getElementById('fps');
+    divFps.innerHTML = `${engine.getFps().toFixed()} fps`;
+
+    scene.render();
   });
 }
 
