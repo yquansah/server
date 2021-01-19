@@ -19,11 +19,13 @@ class Character {
 
   state: CharacterState;
 
+  lastHit: any;
+
   constructor(scene) {
     const humanoidMaterial = new StandardMaterial('humanoidMaterial', scene);
     humanoidMaterial.diffuseColor = new Color3(0, 1, 0);
 
-    const humanoidRoot = MeshBuilder.CreateBox('humanoidRoot', { width: 0.5, height: 0.5, depth: 0.5 }, scene);
+    const humanoidRoot = MeshBuilder.CreateBox('humanoidRoot', { width: 0.5, height: 0.5, depth: 0.25 }, scene);
     humanoidRoot.position = new Vector3(0, 1.75, 0);
     humanoidRoot.material = humanoidMaterial;
     humanoidRoot.showBoundingBox = true;
@@ -75,6 +77,12 @@ class Character {
       nextState = CharacterState.Walking;
     }
 
+    // set the humanoid speed
+    this.humanoidRoot.physicsImpostor.setAngularVelocity(new Vector3(0, 0, 0));
+    this.humanoidRoot.physicsImpostor.setLinearVelocity(
+      new Vector3(0, this.humanoidRoot.physicsImpostor.getLinearVelocity().y, 0),
+    );
+
     // reorient humanoid root
     const eulerRotation = this.humanoidRoot.rotationQuaternion.toEulerAngles();
     this.humanoidRoot.rotationQuaternion = Quaternion.FromEulerAngles(
@@ -85,10 +93,9 @@ class Character {
     const boundingVectors = this.humanoidRoot.getBoundingInfo().boundingBox.vectorsWorld;
     const dimensions = boundingVectors[1].subtract(boundingVectors[0]);
     const height = dimensions.y;
-    const point = this.humanoidRoot.position.add(
-      new Vector3(0, -height / 2, 0),
+    const ray = new Ray(
+      this.humanoidRoot.position, new Vector3(0, -1, 0), this.hipHeight + height / 2,
     );
-    const ray = new Ray(point, new Vector3(0, -1, 0), this.hipHeight);
     const hit = scene.pickWithRay(ray, (mesh) => {
       if (mesh === this.humanoidRoot || mesh instanceof LinesMesh) {
         return false;
@@ -99,13 +106,19 @@ class Character {
       if (this.humanoidRoot.physicsImpostor.getLinearVelocity().y < 0) {
         this.humanoidRoot.physicsImpostor.setLinearVelocity(new Vector3(0, 0, 0));
       }
-      this.humanoidRoot.physicsImpostor.setAngularVelocity(new Vector3(0, 0, 0));
 
       // spring up humanoid root part
-      const goalY = hit.pickedPoint.y + dimensions.y / 2 + this.hipHeight;
+      const goalY = hit.pickedPoint.y + this.hipHeight + height / 2;
+      const diff = goalY - this.humanoidRoot.position.y;
 
       // this.humanoidRoot.translate(Axis.Y, movementY, Space.WORLD);
-      this.humanoidRoot.position.y = goalY;
+      this.humanoidRoot.position.y += diff * 0.3;
+
+      if (hit.pickedMesh !== this.lastHit) {
+        console.log(hit.pickedMesh);
+        console.log(goalY);
+      }
+      this.lastHit = hit.pickedMesh;
     } else {
       nextState = CharacterState.Falling;
     }

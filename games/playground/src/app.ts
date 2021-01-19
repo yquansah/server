@@ -2,7 +2,7 @@ import '@babylonjs/core/Debug/debugLayer';
 import '@babylonjs/inspector';
 import '@babylonjs/loaders/glTF';
 import {
-  Engine, Scene, Vector3, HemisphericLight, Mesh, Color3, CannonJSPlugin, MeshBuilder, StandardMaterial, PhysicsImpostor, MotorEnabledJoint, PhysicsJoint, Axis, UniversalCamera,
+  Engine, Scene, Vector3, HemisphericLight, Mesh, Color3, CannonJSPlugin, MeshBuilder, StandardMaterial, PhysicsImpostor, MotorEnabledJoint, PhysicsJoint, Axis, UniversalCamera, Space,
 } from '@babylonjs/core';
 import * as cannon from 'cannon';
 import Sky from './sky';
@@ -30,13 +30,27 @@ function setupMap(scene) {
   const sky = new Sky(scene);
 
   const obstacle = MeshBuilder.CreateBox('obstacle', { width: 1, height: 1, depth: 1 }, scene);
-  obstacle.position = new Vector3(4, 0.5, 0);
+  obstacle.position = new Vector3(0, 5, 0);
   obstacle.showBoundingBox = true;
   obstacle.physicsImpostor = new PhysicsImpostor(
     obstacle,
     PhysicsImpostor.BoxImpostor,
     {
       mass: 1,
+      friction: 0.1,
+      restitution: 0.1,
+    }, scene,
+  );
+
+  const slope = MeshBuilder.CreateBox('obstacle', { width: 5, height: 0.1, depth: 5 }, scene);
+  slope.position = new Vector3(6, 2, 0);
+  slope.rotate(new Vector3(0, 0, 1), Math.PI / 10, Space.WORLD);
+  slope.showBoundingBox = true;
+  slope.physicsImpostor = new PhysicsImpostor(
+    slope,
+    PhysicsImpostor.BoxImpostor,
+    {
+      mass: 0,
       friction: 0.1,
       restitution: 0.1,
     }, scene,
