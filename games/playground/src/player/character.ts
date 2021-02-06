@@ -1,15 +1,17 @@
 import {
   RayHelper,
   Space,
-  Scene,
-  Vector3, Mesh, Color3, Quaternion, MeshBuilder, StandardMaterial, PhysicsImpostor, MotorEnabledJoint, PhysicsJoint, Axis, Ray, LinesMesh,
+  Scene, Scalar,
+  Vector3, Mesh, Color3, Quaternion, MeshBuilder, StandardMaterial, PhysicsImpostor, MotorEnabledJoint, PhysicsJoint, Axis, Ray, LinesMesh, SceneLoader, AnimationGroup,
 } from '@babylonjs/core';
+import { getDimensions, getGroupDimensions, StateEmitter } from './util';
 
 enum CharacterState {
   Walking = 'WALKING',
   Idle = 'IDLE',
   Falling = 'FALLING',
   Jumping = 'JUMPING',
+  Running = 'Running',
 }
 
 class Character {
@@ -17,27 +19,19 @@ class Character {
 
   hipHeight: number;
 
-  state: CharacterState;
+  events: StateEmitter;
 
-  lastHit: any;
+  private _state: CharacterState;
 
-  constructor(scene) {
-    const humanoidMaterial = new StandardMaterial('humanoidMaterial', scene);
-    humanoidMaterial.diffuseColor = new Color3(0, 1, 0);
+  scene: any;
 
-    const humanoidRoot = MeshBuilder.CreateBox('humanoidRoot', { width: 0.5, height: 0.5, depth: 0.25 }, scene);
-    humanoidRoot.position = new Vector3(0, 1.75, 0);
-    humanoidRoot.material = humanoidMaterial;
-    humanoidRoot.showBoundingBox = true;
-    humanoidRoot.physicsImpostor = new PhysicsImpostor(
-      humanoidRoot,
-      PhysicsImpostor.BoxImpostor,
-      {
-        mass: 1,
-        friction: 0.1,
-        restitution: 0.1,
-      }, scene,
-    );
+  camera: any;
+
+  dimensions: Vector3;
+
+  constructor(scene, camera) {
+    this.events = new StateEmitter();
+    this.camera = camera;
 
     // const feet = MeshBuilder.CreateBox('player', { width: 1, height: 1, depth: 1 }, scene);
     // feet.position = new Vector3(0, 0.5, 0);
@@ -64,9 +58,115 @@ class Character {
 
     // humanoidRoot.physicsImpostor.addJoint(feet.physicsImpostor, joint);
 
-    this.humanoidRoot = humanoidRoot;
-    this.hipHeight = 1;
+    this.scene = scene;
     this.state = CharacterState.Idle;
+  }
+
+  private initializeHumanoidRoot() {
+    const { scene } = this;
+    const humanoidMaterial = new StandardMaterial('humanoidMaterial', scene);
+    humanoidMaterial.alpha = 0;
+
+    const humanoidRoot = MeshBuilder.CreateBox('humanoidRoot',
+      {
+        width: this.dimensions.x,
+        height: this.dimensions.y - this.hipHeight,
+        depth: this.dimensions.z,
+      },
+      scene);
+    humanoidRoot.position = new Vector3(0, 1.75, 0);
+    humanoidRoot.material = humanoidMaterial;
+    humanoidRoot.showBoundingBox = true;
+    humanoidRoot.physicsImpostor = new PhysicsImpostor(
+      humanoidRoot,
+      PhysicsImpostor.BoxImpostor,
+      {
+        mass: 1,
+        friction: 0.1,
+        restitution: 0.1,
+      }, scene,
+    );
+
+    this.humanoidRoot = humanoidRoot;
+  }
+
+  initializeCharacter(characterMeshes) {
+    const { scene } = this;
+    const meshRoot = characterMeshes[0];
+    this.dimensions = getGroupDimensions(meshRoot);
+    this.hipHeight = this.dimensions.y / 4;
+    this.initializeHumanoidRoot();
+
+    meshRoot.parent = this.humanoidRoot;
+    meshRoot.position = new Vector3(0, (-this.dimensions.y - this.hipHeight) / 2, 0);
+
+    this.camera.initialize(this);
+
+    // Initialize override animations, turn on idle by default
+    const idleAnim = scene.animationGroups.find((a) => a.name === 'idle');
+    const idleParam = { name: 'Idle', anim: idleAnim, weight: 1 };
+    idleAnim.play(true);
+    idleAnim.setWeightForAllAnimatables(1);
+
+    const walkAnim = scene.animationGroups.find((a) => a.name === 'walk');
+    const walkParam = { name: 'Walk', anim: walkAnim, weight: 0 };
+    walkAnim.play(true);
+    walkAnim.setWeightForAllAnimatables(0);
+
+    const runAnim = scene.animationGroups.find((a) => a.name === 'run');
+    const runParam = { name: 'Run', anim: runAnim, weight: 0 };
+    runAnim.play(true);
+    runAnim.setWeightForAllAnimatables(0);
+
+    let currentParam = idleParam;
+    function onBeforeAnimation() {
+      const weightInc = 0.1;
+      // Increment the weight of the current override animation
+      if (currentParam) {
+        currentParam.weight = Scalar.Clamp(currentParam.weight + weightInc, 0, 1);
+        currentParam.anim.setWeightForAllAnimatables(currentParam.weight);
+      }
+
+      // Decrement the weight of all override animations that aren't current
+      if (currentParam !== idleParam) {
+        idleParam.weight = Scalar.Clamp(idleParam.weight - weightInc, 0, 1);
+        idleParam.anim.setWeightForAllAnimatables(idleParam.weight);
+      }
+
+      if (currentParam !== walkParam) {
+        walkParam.weight = Scalar.Clamp(walkParam.weight - weightInc, 0, 1);
+        walkParam.anim.setWeightForAllAnimatables(walkParam.weight);
+      }
+
+      if (currentParam !== runParam) {
+        runParam.weight = Scalar.Clamp(runParam.weight - weightInc, 0, 1);
+        runParam.anim.setWeightForAllAnimatables(runParam.weight);
+      }
+
+      // Remove the callback the current animation weight reaches 1 or
+      // when all override animations reach 0 when current is undefined
+      if ((currentParam && currentParam.weight === 1)
+        || (idleParam.weight === 0 && walkParam.weight === 0 && runParam.weight === 0)) {
+        scene.onBeforeAnimationsObservable.removeCallback(onBeforeAnimation);
+      }
+    }
+
+    this.events.on('state', (state, lastState) => {
+      scene.onBeforeAnimationsObservable.removeCallback(onBeforeAnimation);
+
+      if (this.state === CharacterState.Idle) {
+        currentParam = idleParam;
+      } else if (this.state === CharacterState.Falling) {
+        currentParam = idleParam;
+      } else if (this.state === CharacterState.Running) {
+        currentParam = runParam;
+      } else if (this.state === CharacterState.Walking) {
+        currentParam = walkParam;
+      }
+
+      scene.onBeforeAnimationsObservable.add(onBeforeAnimation);
+      console.log(`changing state: ${state} ${lastState}`);
+    });
   }
 
   move(x: number, z: number, deltaTimeMs: number, scene: Scene) {
@@ -89,44 +189,52 @@ class Character {
       0, eulerRotation.y, 0,
     );
 
-    // ray casting to see
-    const boundingVectors = this.humanoidRoot.getBoundingInfo().boundingBox.vectorsWorld;
-    const dimensions = boundingVectors[1].subtract(boundingVectors[0]);
+    // ray casting from all 4 corners and center to see
+    const dimensions = getDimensions(this.humanoidRoot);
+    const width = dimensions.x;
+    const depth = dimensions.z;
     const height = dimensions.y;
-    const ray = new Ray(
-      this.humanoidRoot.position, new Vector3(0, -1, 0), this.hipHeight + height / 2,
-    );
-    const hit = scene.pickWithRay(ray, (mesh) => {
-      if (mesh === this.humanoidRoot || mesh instanceof LinesMesh) {
-        return false;
+    let goalY;
+    let maxDiff = -1;
+    for (let xScale = -1; xScale <= 1; xScale += 1) {
+      for (let zScale = -1; zScale <= 1; zScale += 1) {
+        const ray = new Ray(
+          this.humanoidRoot.position.add(
+            new Vector3(xScale * 0.5 * width, 0 - height / 2, zScale * 0.5 * depth),
+          ),
+          new Vector3(0, -1, 0), this.hipHeight,
+        );
+        const curHit = scene.pickWithRay(ray, (mesh) => {
+          if (mesh === this.humanoidRoot || mesh.isDescendantOf(this.humanoidRoot)) {
+            return false;
+          }
+          return true;
+        });
+        if (curHit.hit) {
+          const curGoalY = curHit.pickedPoint.y + this.hipHeight + height / 2;
+          const diff = curGoalY - this.humanoidRoot.position.y;
+
+          if (diff > maxDiff) {
+            maxDiff = diff;
+            goalY = curGoalY;
+          }
+        }
       }
-      return true;
-    });
-    if (hit.hit) {
+    }
+    if (goalY) {
       if (this.humanoidRoot.physicsImpostor.getLinearVelocity().y < 0) {
         this.humanoidRoot.physicsImpostor.setLinearVelocity(new Vector3(0, 0, 0));
       }
 
       // spring up humanoid root part
-      const goalY = hit.pickedPoint.y + this.hipHeight + height / 2;
       const diff = goalY - this.humanoidRoot.position.y;
 
       // this.humanoidRoot.translate(Axis.Y, movementY, Space.WORLD);
       this.humanoidRoot.position.y += diff * 0.3;
-
-      if (hit.pickedMesh !== this.lastHit) {
-        console.log(hit.pickedMesh);
-        console.log(goalY);
-      }
-      this.lastHit = hit.pickedMesh;
     } else {
       nextState = CharacterState.Falling;
     }
 
-    // set state
-    if (this.state !== nextState) {
-      console.log('change character state to:', nextState);
-    }
     this.state = nextState;
 
     // move character
@@ -148,6 +256,19 @@ class Character {
   // rotate character around y axis to look side to side
   rotate(yAngle) {
     this.humanoidRoot.rotate(new Vector3(0, 1, 0), yAngle, Space.WORLD);
+  }
+
+  get state() {
+    return this._state;
+  }
+
+  set state(nextState: CharacterState) {
+    const lastState = this._state;
+    this._state = nextState;
+
+    if (lastState !== nextState) {
+      this.events.emit('state', nextState, lastState);
+    }
   }
 }
 

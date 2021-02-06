@@ -2,6 +2,7 @@ import '@babylonjs/core/Debug/debugLayer';
 import '@babylonjs/inspector';
 import '@babylonjs/loaders/glTF';
 import {
+  AssetsManager,
   Engine, Scene, Vector3, HemisphericLight, Mesh, Color3, CannonJSPlugin, MeshBuilder, StandardMaterial, PhysicsImpostor, MotorEnabledJoint, PhysicsJoint, Axis, UniversalCamera, Space,
 } from '@babylonjs/core';
 import * as cannon from 'cannon';
@@ -14,6 +15,12 @@ import ThirdPersonCamera from './player/thirdPersonCamera';
 const lightingConfig = {
   ambient: new Color3(138 / 255, 138 / 255, 138 / 255),
 };
+
+function initializeGame(scene) {
+  const assetManager = new AssetsManager(scene);
+  const task = assetManager.addMeshTask('loading character mesh', '', './assets/', 'Xbot.glb');
+  return { assetManager, tasks: [task] };
+}
 
 function setupLighting(config, scene) {
   const ambientLight = new HemisphericLight('ambientLight', new Vector3(0, 1, 0), scene);
@@ -70,11 +77,12 @@ async function main() {
   const scene = new Scene(engine);
   scene.enablePhysics(new Vector3(0, -9.81, 0), new CannonJSPlugin(true, 100, cannon));
 
+  const { assetManager, tasks: [characterMeshTask] } = initializeGame(scene);
   setupMap(scene);
   setupLighting(lightingConfig, scene);
 
-  const character = new Character(scene);
-  const camera = new ThirdPersonCamera(scene, character);
+  const camera = new ThirdPersonCamera(scene);
+  const character = new Character(scene, camera);
 
   canvas.onclick = function onClick() {
     canvas.requestPointerLock();
@@ -112,6 +120,18 @@ async function main() {
   window.addEventListener('keyup', (ev) => {
     keysPressed[ev.key] = false;
   });
+
+  assetManager.onProgress = function (remainingCount, totalCount) {
+    engine.loadingUIText = `We are loading the scene. ${remainingCount} out of ${totalCount} items still need to be loaded.`;
+  };
+
+  try {
+    await assetManager.loadAsync();
+  } catch (error) {
+    console.log('testing', error);
+  }
+
+  character.initializeCharacter(characterMeshTask.loadedMeshes);
 
   // run the main render loop
   engine.runRenderLoop(() => {
