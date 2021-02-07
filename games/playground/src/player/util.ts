@@ -1,4 +1,6 @@
-import { Node, Vector3, AbstractMesh } from '@babylonjs/core';
+import {
+  Node, Vector3, AbstractMesh, Ray,
+} from '@babylonjs/core';
 import * as EventEmitter from 'events';
 
 function abs(original: Vector3) {

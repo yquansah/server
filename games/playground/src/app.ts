@@ -148,7 +148,7 @@ async function main() {
       }
     });
 
-    character.move(move2DVector[0], move2DVector[1], deltaTimeMs, scene);
+    character.move(move2DVector[0], move2DVector[1], deltaTimeMs);
     character.rotate(mouseXDiff / 1000);
     camera.rotate(mouseYDiff / 1000);
 

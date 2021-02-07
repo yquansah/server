@@ -4,7 +4,9 @@ import {
   Scene, Scalar,
   Vector3, Mesh, Color3, Quaternion, MeshBuilder, StandardMaterial, PhysicsImpostor, MotorEnabledJoint, PhysicsJoint, Axis, Ray, LinesMesh, SceneLoader, AnimationGroup,
 } from '@babylonjs/core';
-import { getDimensions, getGroupDimensions, StateEmitter } from './util';
+import {
+  getDimensions, getGroupDimensions, StateEmitter,
+} from './util';
 
 enum CharacterState {
   Walking = 'WALKING',
@@ -28,6 +30,8 @@ class Character {
   camera: any;
 
   dimensions: Vector3;
+
+  humanoidRootDims: Vector3;
 
   constructor(scene, camera) {
     this.events = new StateEmitter();
@@ -86,7 +90,7 @@ class Character {
         restitution: 0.1,
       }, scene,
     );
-
+    this.humanoidRootDims = getDimensions(humanoidRoot);
     this.humanoidRoot = humanoidRoot;
   }
 
@@ -169,7 +173,55 @@ class Character {
     });
   }
 
-  move(x: number, z: number, deltaTimeMs: number, scene: Scene) {
+  checkOnGround() {
+    const width = this.humanoidRootDims.x;
+    const depth = this.humanoidRootDims.z;
+    const height = this.humanoidRootDims.y;
+    const buffer = height / 100;
+    for (let xScale = -1; xScale <= 1; xScale += 1) {
+      for (let zScale = -1; zScale <= 1; zScale += 1) {
+        const ray = new Ray(
+          this.humanoidRoot.position.add(
+            new Vector3(xScale * 0.5 * width, 0 - height / 2 + buffer, zScale * 0.5 * depth),
+          ),
+          new Vector3(0, -1, 0), this.hipHeight + buffer,
+        );
+        const curHit = this.scene.pickWithRay(ray, (mesh) => {
+          if (mesh === this.humanoidRoot || mesh.isDescendantOf(this.humanoidRoot)) {
+            return false;
+          }
+          return true;
+        });
+        if (curHit.hit) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  getGoalY() {
+    const height = this.humanoidRootDims.y;
+    const buffer = height / 100;
+    const ray = new Ray(
+      this.humanoidRoot.position.add(
+        new Vector3(0, 0 - height / 2 + buffer, 0),
+      ),
+      new Vector3(0, -1, 0), this.hipHeight + buffer,
+    );
+    const curHit = this.scene.pickWithRay(ray, (mesh) => {
+      if (mesh === this.humanoidRoot || mesh.isDescendantOf(this.humanoidRoot)) {
+        return false;
+      }
+      return true;
+    });
+    if (curHit.hit) {
+      return curHit.pickedPoint.y + this.hipHeight + height / 2;
+    }
+    return null;
+  }
+
+  move(x: number, z: number, deltaTimeMs: number) {
     let nextState;
     if (x === 0 && z === 0) {
       nextState = CharacterState.Idle;
@@ -189,48 +241,21 @@ class Character {
       0, eulerRotation.y, 0,
     );
 
-    // ray casting from all 4 corners and center to see
-    const dimensions = getDimensions(this.humanoidRoot);
-    const width = dimensions.x;
-    const depth = dimensions.z;
-    const height = dimensions.y;
-    let goalY;
-    let maxDiff = -1;
-    for (let xScale = -1; xScale <= 1; xScale += 1) {
-      for (let zScale = -1; zScale <= 1; zScale += 1) {
-        const ray = new Ray(
-          this.humanoidRoot.position.add(
-            new Vector3(xScale * 0.5 * width, 0 - height / 2, zScale * 0.5 * depth),
-          ),
-          new Vector3(0, -1, 0), this.hipHeight,
-        );
-        const curHit = scene.pickWithRay(ray, (mesh) => {
-          if (mesh === this.humanoidRoot || mesh.isDescendantOf(this.humanoidRoot)) {
-            return false;
-          }
-          return true;
-        });
-        if (curHit.hit) {
-          const curGoalY = curHit.pickedPoint.y + this.hipHeight + height / 2;
-          const diff = curGoalY - this.humanoidRoot.position.y;
+    // ray casting from all 4 corners and center to characterize as falling
+    const isOnGround = this.checkOnGround();
+    if (isOnGround) {
+      const goalY = this.getGoalY();
+      if (goalY) {
+        if (this.humanoidRoot.physicsImpostor.getLinearVelocity().y < 0) {
+          this.humanoidRoot.physicsImpostor.setLinearVelocity(new Vector3(0, 0, 0));
 
-          if (diff > maxDiff) {
-            maxDiff = diff;
-            goalY = curGoalY;
-          }
+          // spring up humanoid root part
+          const diff = goalY - this.humanoidRoot.position.y;
+
+          // this.humanoidRoot.translate(Axis.Y, movementY, Space.WORLD);
+          this.humanoidRoot.position.y += diff * 0.3;
         }
       }
-    }
-    if (goalY) {
-      if (this.humanoidRoot.physicsImpostor.getLinearVelocity().y < 0) {
-        this.humanoidRoot.physicsImpostor.setLinearVelocity(new Vector3(0, 0, 0));
-      }
-
-      // spring up humanoid root part
-      const diff = goalY - this.humanoidRoot.position.y;
-
-      // this.humanoidRoot.translate(Axis.Y, movementY, Space.WORLD);
-      this.humanoidRoot.position.y += diff * 0.3;
     } else {
       nextState = CharacterState.Falling;
     }
