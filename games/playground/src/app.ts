@@ -50,7 +50,7 @@ function setupMap(scene) {
   );
 
   const slope = MeshBuilder.CreateBox('obstacle', { width: 5, height: 0.1, depth: 5 }, scene);
-  slope.position = new Vector3(6, 2, 0);
+  slope.position = new Vector3(3, 2, 0);
   slope.rotate(new Vector3(0, 0, 1), Math.PI / 10, Space.WORLD);
   slope.showBoundingBox = true;
   slope.physicsImpostor = new PhysicsImpostor(

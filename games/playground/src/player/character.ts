@@ -178,13 +178,20 @@ class Character {
     const depth = this.humanoidRootDims.z;
     const height = this.humanoidRootDims.y;
     const buffer = height / 100;
+    let maxFound = false;
+    let maxGoalY = Number.NEGATIVE_INFINITY;
     for (let xScale = -1; xScale <= 1; xScale += 1) {
       for (let zScale = -1; zScale <= 1; zScale += 1) {
         const ray = new Ray(
           this.humanoidRoot.position.add(
-            new Vector3(xScale * 0.5 * width, 0 - height / 2 + buffer, zScale * 0.5 * depth),
+            new Vector3(
+              xScale * 0.5 * width,
+              -height / 2 + buffer,
+              zScale * 0.5 * depth,
+            ),
           ),
-          new Vector3(0, -1, 0), this.hipHeight + buffer,
+          new Vector3(0, -1, 0),
+          this.hipHeight + buffer,
         );
         const curHit = this.scene.pickWithRay(ray, (mesh) => {
           if (mesh === this.humanoidRoot || mesh.isDescendantOf(this.humanoidRoot)) {
@@ -193,32 +200,20 @@ class Character {
           return true;
         });
         if (curHit.hit) {
-          return true;
+          let goalY;
+          if (xScale === 0 && zScale === 0) {
+            goalY = curHit.pickedPoint.y + this.hipHeight + height / 2;
+          } else {
+            goalY = curHit.pickedPoint.y + this.hipHeight / 2 + height / 2;
+          }
+          if (goalY > maxGoalY) {
+            maxFound = true;
+            maxGoalY = goalY;
+          }
         }
       }
     }
-    return false;
-  }
-
-  getGoalY() {
-    const height = this.humanoidRootDims.y;
-    const buffer = height / 100;
-    const ray = new Ray(
-      this.humanoidRoot.position.add(
-        new Vector3(0, 0 - height / 2 + buffer, 0),
-      ),
-      new Vector3(0, -1, 0), this.hipHeight + buffer,
-    );
-    const curHit = this.scene.pickWithRay(ray, (mesh) => {
-      if (mesh === this.humanoidRoot || mesh.isDescendantOf(this.humanoidRoot)) {
-        return false;
-      }
-      return true;
-    });
-    if (curHit.hit) {
-      return curHit.pickedPoint.y + this.hipHeight + height / 2;
-    }
-    return null;
+    return maxFound && maxGoalY;
   }
 
   move(x: number, z: number, deltaTimeMs: number) {
@@ -241,20 +236,19 @@ class Character {
       0, eulerRotation.y, 0,
     );
 
-    // ray casting from all 4 corners and center to characterize as falling
-    const isOnGround = this.checkOnGround();
-    if (isOnGround) {
-      const goalY = this.getGoalY();
-      if (goalY) {
-        if (this.humanoidRoot.physicsImpostor.getLinearVelocity().y < 0) {
-          this.humanoidRoot.physicsImpostor.setLinearVelocity(new Vector3(0, 0, 0));
+    const goalY = this.checkOnGround();
+    if (goalY) {
+      if (
+        this.humanoidRoot.physicsImpostor.getLinearVelocity().y < 0
+        && goalY > this.humanoidRoot.absolutePosition.y
+      ) {
+        this.humanoidRoot.physicsImpostor.setLinearVelocity(new Vector3(0, 0, 0));
 
-          // spring up humanoid root part
-          const diff = goalY - this.humanoidRoot.position.y;
+        // spring up humanoid root part
+        const diff = goalY - this.humanoidRoot.position.y;
 
-          // this.humanoidRoot.translate(Axis.Y, movementY, Space.WORLD);
-          this.humanoidRoot.position.y += diff * 0.3;
-        }
+        // this.humanoidRoot.translate(Axis.Y, movementY, Space.WORLD);
+        this.humanoidRoot.position.y += diff * 0.3;
       }
     } else {
       nextState = CharacterState.Falling;
