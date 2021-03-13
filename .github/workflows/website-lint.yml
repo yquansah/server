@@ -12,10 +12,17 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
-      - name: running-test-cases
+      - name: setup node
         uses: actions/setup-node@v1
         with:
           node-version: ${{ matrix.node-version }}
-      - run: cd website && npm ci
-      - name: lint
-        run: cd website && npm run lint
+      - name: lint-frontend
+        run: |
+          cd website
+          npm ci
+          npm run lint
+      - name: lint-backend
+        run: |
+          cd server
+          npm ci
+          npm run lint
