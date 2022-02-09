@@ -21,6 +21,7 @@
     "npm": ">=6.0.0"
   },
   "dependencies": {
+    "@google-cloud/functions": "^1.2.0",
     "@socket.io/redis-adapter": "^7.0.0",
     "axios": "^0.21.1",
     "celebrate": "^13.0.4",

@@ -95,7 +95,7 @@ function setupRouter({ io }) {
     }
 
     await room.populate('players').populate('game').populate({ path: 'game', populate: { path: 'creator' } }).execPopulate();
-    const userCode = await UserCode.fromGame(room.game);
+    const userCode = await UserCode.fromNodeVM(room.game);
     const creatorInitRoomState = userCode.startRoom();
     const roomState = new RoomState({
       room: room.id,
@@ -125,7 +125,7 @@ function setupRouter({ io }) {
     const { id } = req.params;
 
     let room = await Room.findById(id).populate('game');
-    const userCode = await UserCode.fromGame(room.game);
+    const userCode = await UserCode.fromNodeVM(room.game);
 
     let newRoomState;
     try {
@@ -173,7 +173,7 @@ function setupRouter({ io }) {
       if (!room.containsPlayer(userId)) {
         throw new UserNotInRoomError(userId, room);
       }
-      const userCode = await UserCode.fromGame(room.game);
+      const userCode = await UserCode.fromNodeVM(room.game);
       let newRoomState;
       await mongoose.connection.transaction(async (session) => {
         room = await Room.findById(id).populate('latestState').session(session);
@@ -212,7 +212,7 @@ function setupRouter({ io }) {
       if (!room.containsPlayer(userId)) {
         throw new UserNotInRoomError(userId, room);
       }
-      const userCode = await UserCode.fromGame(room.game);
+      const userCode = await UserCode.fromNodeVM(room.game);
       let newRoomState;
       await mongoose.connection.transaction(async (session) => {
         room = await Room.findById(id).populate('latestState').session(session);

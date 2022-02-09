@@ -3,13 +3,23 @@ const axios = require('axios');
 
 const logger = require('../../logger');
 const { CreatorInvalidMoveError } = require('./errors');
+const functionsClient = require('../../setupCloudFunctionsClient');
+
+async function listFunctions() {
+  const projectId = 'board-games-io';
+  const [functions] = await functionsClient.listFunctions({
+    parent: `projects/${projectId}/locations/-`,
+  });
+  console.info(functions);
+}
+listFunctions();
 
 class UserCode {
   constructor(userCodeRaw) {
     this.userCodeRaw = userCodeRaw;
   }
 
-  static async fromGame(game) {
+  static async fromNodeVM(game) {
     logger.info('getting game code', { url: game.githubURL, id: game.id });
     const githubURL = new URL(game.githubURL);
     const [owner, repo] = githubURL.pathname.match(/[^/]+/g);
@@ -21,6 +31,25 @@ class UserCode {
     });
     const userCodeRaw = vm.run(userCodeRawStr);
     const userCode = new UserCode(userCodeRaw);
+    return userCode;
+  }
+
+  static async fromCloudFunctions(game) {
+    logger.info('getting game code', { url: game.githubURL, id: game.id });
+    const githubURL = new URL(game.githubURL);
+    const [owner, repo] = githubURL.pathname.match(/[^/]+/g);
+    const url = `https://raw.githubusercontent.com/${owner}/${repo}/${game.commitSHA}/index.js`;
+    const { data: userCodeRawStr } = await axios.get(url);
+    const vm = new NodeVM({});
+    vm.on('console.log', (data) => {
+      logger.info('user code:', { data });
+    });
+    const userCodeRaw = vm.run(userCodeRawStr);
+    const userCode = new UserCode(userCodeRaw);
+
+    // create function if it doesn't exist, tag it with relevant information
+    // cleanup and delete all functions periodically
+
     return userCode;
   }
 
