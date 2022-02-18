@@ -1,5 +1,6 @@
 const { NodeVM } = require('vm2');
 const axios = require('axios');
+const memoize = require('memoizee');
 
 const logger = require('../../logger');
 const { CreatorError } = require('./errors');
@@ -7,21 +8,6 @@ const { CreatorError } = require('./errors');
 class UserCode {
   constructor(userCodeRaw) {
     this.userCodeRaw = userCodeRaw;
-  }
-
-  static async fromGame(game) {
-    logger.info('getting game code', { url: game.githubURL, id: game.id });
-    const githubURL = new URL(game.githubURL);
-    const [owner, repo] = githubURL.pathname.match(/[^/]+/g);
-    const url = `https://raw.githubusercontent.com/${owner}/${repo}/${game.commitSHA}/index.js`;
-    const { data: userCodeRawStr } = await axios.get(url);
-    const vm = new NodeVM({});
-    vm.on('console.log', (data) => {
-      logger.info('user code:', { data });
-    });
-    const userCodeRaw = vm.run(userCodeRawStr);
-    const userCode = new UserCode(userCodeRaw);
-    return userCode;
   }
 
   static getCreatorRoomState(room, roomState) {
@@ -82,5 +68,26 @@ class UserCode {
     ));
   }
 }
+
+UserCode.fromGame = memoize(async (game) => {
+  logger.info('getting game code', { url: game.githubURL, id: game.id });
+  const githubURL = new URL(game.githubURL);
+  const [owner, repo] = githubURL.pathname.match(/[^/]+/g);
+  const url = `https://raw.githubusercontent.com/${owner}/${repo}/${game.commitSHA}/index.js`;
+  const { data: userCodeRawStr } = await axios.get(url);
+  const vm = new NodeVM({});
+  vm.on('console.log', (data) => {
+    logger.info('user code:', { data });
+  });
+  const userCodeRaw = vm.run(userCodeRawStr);
+  const userCode = new UserCode(userCodeRaw);
+  return userCode;
+}, {
+  normalizer([game]) {
+    return game.githubURL + game.commitSha;
+  },
+  max: 1000,
+  async: true,
+});
 
 module.exports = UserCode;
