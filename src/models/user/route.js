@@ -42,6 +42,17 @@ router.post('/', asyncHandler(async (req, res) => {
   }
 }));
 
+router.delete('/', asyncHandler(async (req, res) => {
+  const { user } = req;
+  const uniqueID = user.firebaseId;
+
+  try {
+    await User.findOneAndDelete({ firebaseId: uniqueID });
+  } finally {
+    res.status(StatusCodes.OK);
+  }
+}));
+
 module.exports = {
   router,
   PATH,

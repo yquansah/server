@@ -3,7 +3,7 @@ const { StatusCodes } = require('http-status-codes');
 
 const { spawnApp } = require('../util/app');
 const { createUserCred } = require('../util/firebase');
-const { createUserAndAssert } = require('../util/api_util');
+const { createUserAndAssert, deleteUserAndAssert } = require('../util/api_util');
 const { createOrUpdateSideApps } = require('../util/util');
 
 test.before(async (t) => {
@@ -45,6 +45,8 @@ test('GET /user returns user object', async (t) => {
   const { status, data } = await api.get('/user', { headers: { authorization: authToken } });
   t.is(status, StatusCodes.OK);
   t.deepEqual(data, { user });
+
+  await deleteUserAndAssert(t, api, userCred);
 });
 
 test('POST /user returns 409 if one already exists', async (t) => {
@@ -54,6 +56,8 @@ test('POST /user returns 409 if one already exists', async (t) => {
   const authToken = await userCred.user.getIdToken();
   const { response: { status } } = await t.throwsAsync(api.post('/user', {}, { headers: { authorization: authToken } }));
   t.is(status, StatusCodes.CONFLICT);
+
+  await deleteUserAndAssert(t, api, userCred);
 });
 
 test('POST /user returns 500 if username generation fails', async (t) => {
@@ -71,12 +75,16 @@ test('POST /user returns 500 if username generation fails', async (t) => {
   const { response: { status, data: { name } } } = await t.throwsAsync(api.post('/user', {}, { headers: { authorization: authTokenTwo } }));
   t.is(status, StatusCodes.INTERNAL_SERVER_ERROR);
   t.is(name, 'UsernameGeneration');
+
+  await deleteUserAndAssert(t, api, userCredOne);
 });
 
 test('POST /user creates user', async (t) => {
   const { api } = t.context.app;
   const userCred = await createUserCred();
   await createUserAndAssert(t, api, userCred);
+
+  await deleteUserAndAssert(t, api, userCred);
 });
 
 test('POST /user username generator adds random numbers when there is a collision', async (t) => {
@@ -92,4 +100,7 @@ test('POST /user username generator adds random numbers when there is a collisio
   const userCredTwo = await createUserCred();
   const userTwo = await createUserAndAssert(t, api, userCredTwo);
   t.regex(userTwo.username, /test_[0-9]/);
+
+  await deleteUserAndAssert(t, api, userCredOne);
+  await deleteUserAndAssert(t, api, userCredTwo);
 });
