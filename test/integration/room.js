@@ -5,7 +5,11 @@ const { Types } = require('mongoose');
 const { spawnApp } = require('../util/app');
 const { createUserCred } = require('../util/firebase');
 const {
-  getPublicUserFromUser, createUserAndAssert, createGameAndAssert, createRoomAndAssert,
+  getPublicUserFromUser,
+  createUserAndAssert,
+  createGameAndAssert,
+  createRoomAndAssert,
+  deleteUserAndAssert,
   startTicTacToeRoom,
 } = require('../util/api_util');
 const { createOrUpdateSideApps } = require('../util/util');
@@ -51,6 +55,8 @@ test('GET /room returns list of rooms', async (t) => {
   );
   t.is(status, StatusCodes.OK);
   t.assert(rooms.length > 0);
+
+  await deleteUserAndAssert(t, api, userCred);
 });
 
 test('GET /room supports query by "joinable", "containsPlayer", and "omitPlayer"', async (t) => {
@@ -79,7 +85,7 @@ test('GET /room supports query by "joinable", "containsPlayer", and "omitPlayer"
 test('GET /room supports query by "containsInactivePlayer"', async (t) => {
   const { api } = t.context.app;
   const {
-    userTwo, userCredTwo, room, game,
+    userCredOne, userTwo, userCredTwo, room, game,
   } = await startTicTacToeRoom(t);
   const authTokenTwo = await userCredTwo.user.getIdToken();
 
@@ -108,6 +114,9 @@ test('GET /room supports query by "containsInactivePlayer"', async (t) => {
   t.is(statusUserTwo, StatusCodes.OK);
   t.assert(roomsUserTwoQuit.length === 1);
   t.assert(roomsUserTwoQuit[0].id === room.id);
+
+  await deleteUserAndAssert(t, api, userCredOne);
+  await deleteUserAndAssert(t, api, userCredTwo);
 });
 
 test('POST /room creates a room', async (t) => {
@@ -116,6 +125,8 @@ test('POST /room creates a room', async (t) => {
   const user = await createUserAndAssert(t, api, userCred);
   const game = await createGameAndAssert(t, api, userCred, user);
   await createRoomAndAssert(t, api, userCred, game, user);
+
+  await deleteUserAndAssert(t, api, userCred);
 });
 
 test('POST /room returns \'room.game must exist\' if no room', async (t) => {
@@ -129,10 +140,16 @@ test('POST /room returns \'room.game must exist\' if no room', async (t) => {
     }, { headers: { authorization: authToken } }),
   );
   t.is(status, StatusCodes.BAD_REQUEST);
+
+  await deleteUserAndAssert(t, api, userCred);
 });
 
 test('POST /room/:id/join joins a game', async (t) => {
-  await startTicTacToeRoom(t);
+  const { api } = t.context.app;
+  const { userCredOne, userCredTwo } = await startTicTacToeRoom(t);
+
+  await deleteUserAndAssert(t, api, userCredOne);
+  await deleteUserAndAssert(t, api, userCredTwo);
 });
 
 test('POST /room/:id/join on a non joinable room provides a 400', async (t) => {
@@ -175,7 +192,7 @@ test('POST /room/:id/join on a finished room throws an error', async (t) => {
 });
 
 test('POST /room/:id/move invokes creator backend to modify the game state', async (t) => {
-  const { userCredOne, room } = await startTicTacToeRoom(t);
+  const { userCredOne, userCredTwo, room } = await startTicTacToeRoom(t);
   const { api } = t.context.app;
   const authToken = await userCredOne.user.getIdToken();
 
@@ -195,10 +212,13 @@ test('POST /room/:id/move invokes creator backend to modify the game state', asy
     [null, null, null],
     [null, null, null]],
   board);
+
+  await deleteUserAndAssert(t, api, userCredOne);
+  await deleteUserAndAssert(t, api, userCredTwo);
 });
 
 test('POST /room/:id/move provides error if user code throws an error', async (t) => {
-  const { userCredTwo, room } = await startTicTacToeRoom(t);
+  const { userCredOne, userCredTwo, room } = await startTicTacToeRoom(t);
   const { api } = t.context.app;
 
   // make move with user2 (it's user1's turn!)
@@ -207,6 +227,9 @@ test('POST /room/:id/move provides error if user code throws an error', async (t
     { x: 0, y: 0 },
     { headers: { authorization: authToken } }));
   t.is(status, StatusCodes.BAD_REQUEST);
+
+  await deleteUserAndAssert(t, api, userCredOne);
+  await deleteUserAndAssert(t, api, userCredTwo);
 });
 
 test('POST /room/:id/move provides error if user tries to make move when not in the room', async (t) => {
@@ -222,6 +245,9 @@ test('POST /room/:id/move provides error if user tries to make move when not in 
     { x: 0, y: 0 },
     { headers: { authorization: authTokenTwo } }));
   t.is(status, StatusCodes.BAD_REQUEST);
+
+  await deleteUserAndAssert(t, api, userCredOne);
+  await deleteUserAndAssert(t, api, userCredTwo);
 });
 
 test('POST /room/:id/move provides error if database fails', async (t) => {
