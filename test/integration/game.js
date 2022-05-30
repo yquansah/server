@@ -5,7 +5,7 @@ const { Types } = require('mongoose');
 
 const { spawnApp } = require('../util/app');
 const { createUserCred } = require('../util/firebase');
-const { createGameAndAssert, createUserAndAssert } = require('../util/api_util');
+const { createGameAndAssert, createUserAndAssert, deleteUserAndAssert } = require('../util/api_util');
 
 test.before(async (t) => {
   const app = await spawnApp();
@@ -25,6 +25,8 @@ test('GET /game returns list of games', async (t) => {
   const { data: { games }, status } = await api.get('/game');
   t.is(status, StatusCodes.OK);
   t.assert(games.length > 0);
+
+  await deleteUserAndAssert(t, api, userCred);
 });
 
 test('GET /game can filter for creator', async (t) => {
@@ -42,6 +44,9 @@ test('GET /game can filter for creator', async (t) => {
   const { data: { games: gamesEmpty }, status: statusEmpty } = await api.get('/game', { params: { creator: userTwo.id } });
   t.is(statusEmpty, StatusCodes.OK);
   t.is(gamesEmpty.length, 0);
+
+  await deleteUserAndAssert(t, api, userCredOne);
+  await deleteUserAndAssert(t, api, userCredTwo);
 });
 
 test('GET /game filtering for unsupported query parameters provides 400 status', async (t) => {
@@ -63,6 +68,7 @@ test('GET /game filtering for unsupported query parameters provides 400 status',
       },
     },
   );
+  await deleteUserAndAssert(t, api, userCred);
 });
 
 test('GET /game/:id returns corresponding game', async (t) => {
@@ -73,6 +79,8 @@ test('GET /game/:id returns corresponding game', async (t) => {
   const { data: { game: gameRes }, status } = await api.get(`/game/${game.id}`);
   t.is(status, StatusCodes.OK);
   t.deepEqual(gameRes, gameRes);
+
+  await deleteUserAndAssert(t, api, userCred);
 });
 
 test('GET /game/:id returns 400 if invalid objectid', async (t) => {
@@ -92,6 +100,8 @@ test('POST /game creates a game', async (t) => {
   const userCred = await createUserCred();
   const user = await createUserAndAssert(t, api, userCred);
   await createGameAndAssert(t, api, userCred, user);
+
+  await deleteUserAndAssert(t, api, userCred);
 });
 
 test('POST /game responds 400 if data is missing fields', async (t) => {
@@ -102,6 +112,8 @@ test('POST /game responds 400 if data is missing fields', async (t) => {
   const { response: { status, data: { message } } } = await t.throwsAsync(api.post('/game', {}, { headers: { authorization: authToken } }));
   t.is(status, StatusCodes.BAD_REQUEST);
   t.true(message.includes('Game validation failed'), message);
+
+  await deleteUserAndAssert(t, api, userCred);
 });
 
 test('PUT /game/:id updates a game', async (t) => {
@@ -117,6 +129,8 @@ test('PUT /game/:id updates a game', async (t) => {
   const { data: { game: gameGetRes }, status: statusGet } = await api.get(`/game/${game.id}`);
   t.is(statusGet, StatusCodes.OK);
   t.deepEqual(gameGetRes, gamePutRes);
+
+  await deleteUserAndAssert(t, api, userCred);
 });
 
 test('PUT /game/:id responds unauthorized if user does not match creator', async (t) => {
@@ -135,6 +149,9 @@ test('PUT /game/:id responds unauthorized if user does not match creator', async
   const { data: { game: gameGetRes }, status: statusGet } = await api.get(`/game/${game.id}`);
   t.is(statusGet, StatusCodes.OK);
   t.deepEqual(gameGetRes, game);
+
+  await deleteUserAndAssert(t, api, userCred);
+  await deleteUserAndAssert(t, api, evilUserCred);
 });
 
 test('PUT /game/:id responds not found if game does not exist', async (t) => {
@@ -145,6 +162,8 @@ test('PUT /game/:id responds not found if game does not exist', async (t) => {
   const updateDoc = { name: `integration-tests-${uuidv4()}` };
   const { response: { status: statusPut } } = await t.throwsAsync(api.put(`/game/${Types.ObjectId()}`, updateDoc, { headers: { authorization: authToken } }));
   t.is(statusPut, StatusCodes.NOT_FOUND);
+
+  await deleteUserAndAssert(t, api, userCred);
 });
 
 test('DELETE /game/:id deletes a game', async (t) => {
@@ -157,6 +176,8 @@ test('DELETE /game/:id deletes a game', async (t) => {
   t.is(statusDel, StatusCodes.OK);
   const { response: { status: statusGet } } = await t.throwsAsync(api.get(`/game/${game.id}`));
   t.is(statusGet, StatusCodes.NOT_FOUND);
+
+  await deleteUserAndAssert(t, api, userCred);
 });
 
 test('DELETE /game/:id returns 401 if user does not match creator', async (t) => {
@@ -174,6 +195,9 @@ test('DELETE /game/:id returns 401 if user does not match creator', async (t) =>
   const { data: { game: gameGetRes }, status: statusGet } = await api.get(`/game/${game.id}`);
   t.is(statusGet, StatusCodes.OK);
   t.deepEqual(gameGetRes, game);
+
+  await deleteUserAndAssert(t, api, userCred);
+  await deleteUserAndAssert(t, api, evilUserCred);
 });
 
 test('DELETE /game/:id returns 404 if game does not exist', async (t) => {
@@ -183,4 +207,6 @@ test('DELETE /game/:id returns 404 if game does not exist', async (t) => {
   const authToken = await userCred.user.getIdToken();
   const { response: { status } } = await t.throwsAsync(api.delete(`/game/${Types.ObjectId()}`, { headers: { authorization: authToken } }));
   t.is(status, StatusCodes.NOT_FOUND);
+
+  await deleteUserAndAssert(t, api, userCred);
 });

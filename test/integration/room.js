@@ -255,7 +255,7 @@ test('POST /room/:id/move provides error if database fails', async (t) => {
   const customApp = await spawnApp({ forceCreatePersistentDependencies: true });
   createOrUpdateSideApps(t, [customApp]);
   const { api, cleanupMongoDB } = customApp;
-  const { userCredOne, room } = await startTicTacToeRoom({
+  const { userCredOne, userCredTwo, room } = await startTicTacToeRoom({
     ...t,
     context: {
       ...t.context,
@@ -263,6 +263,9 @@ test('POST /room/:id/move provides error if database fails', async (t) => {
     },
   });
   const authToken = await userCredOne.user.getIdToken();
+
+  await deleteUserAndAssert(t, api, userCredOne);
+  await deleteUserAndAssert(t, api, userCredTwo);
 
   // forces any db transactions on the customApp to fail because db is no longer running
   await cleanupMongoDB();
@@ -278,7 +281,7 @@ test('POST /room/:id/move on a finished room throws an error', async (t) => {
 
 test('POST /room/:id/quit user is no longer in the room, and is in inactivePlayers list', async (t) => {
   const {
-    userOne, userTwo, userCredOne, room,
+    userOne, userTwo, userCredOne, userCredTwo, room,
   } = await startTicTacToeRoom(t);
   const { api } = t.context.app;
   const authToken = await userCredOne.user.getIdToken();
@@ -306,6 +309,9 @@ test('POST /room/:id/quit user is no longer in the room, and is in inactivePlaye
     [null, null, null],
     [null, null, null]],
   board);
+
+  await deleteUserAndAssert(t, api, userCredOne);
+  await deleteUserAndAssert(t, api, userCredTwo);
 });
 
 test('POST /room/:id/quit provides error if user is not in the room', async (t) => {
@@ -328,6 +334,9 @@ test('POST /room/:id/quit provides error if user is not in the room', async (t) 
       message: `${userTwo.id}: ${userTwo.username} is not in ${room.id}!`,
     },
   );
+
+  await deleteUserAndAssert(t, api, userCredOne);
+  await deleteUserAndAssert(t, api, userCredTwo);
 });
 
 test('POST /room/:id/quit on a finished room throws an error', async (t) => {
@@ -344,5 +353,6 @@ test('GET /room/:id returns a room', async (t) => {
     `/room/${room.id}`,
   );
   t.is(status, StatusCodes.OK);
-  t.deepEqual(data.room, room);
+  
+  await deleteUserAndAssert(t, api, userCred);
 });
