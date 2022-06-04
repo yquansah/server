@@ -34,10 +34,18 @@ test.before(async (t) => {
   const app = await spawnApp();
   // eslint-disable-next-line no-param-reassign
   t.context.app = app;
+  t.context.createdUsers = [];
 });
 
 test.after.always(async (t) => {
-  const { app, sideApps } = t.context;
+  const { app, sideApps, createdUsers } = t.context;
+  const { api } = t.context.app;
+
+  // delete users created during tests
+  for (const userCred of createdUsers) {
+    await deleteUserAndAssert(t, api, userCred);
+  }
+
   await app.cleanup();
   if (sideApps) {
     await sideApps.cleanup();
@@ -48,6 +56,8 @@ test('GET /room returns list of rooms', async (t) => {
   const { api } = t.context.app;
   const userCred = await createUserCred();
   const user = await createUserAndAssert(t, api, userCred);
+  t.context.createdUsers.push(userCred);
+
   const game = await createGameAndAssert(t, api, userCred, user);
   await createRoomAndAssert(t, api, userCred, game, user);
   const { data: { rooms }, status } = await api.get(
@@ -55,8 +65,6 @@ test('GET /room returns list of rooms', async (t) => {
   );
   t.is(status, StatusCodes.OK);
   t.assert(rooms.length > 0);
-
-  await deleteUserAndAssert(t, api, userCred);
 });
 
 test('GET /room supports query by "joinable", "containsPlayer", and "omitPlayer"', async (t) => {
@@ -66,6 +74,9 @@ test('GET /room supports query by "joinable", "containsPlayer", and "omitPlayer"
   const authTokenTwo = await userCredTwo.user.getIdToken();
   const userOne = await createUserAndAssert(t, api, userCredOne);
   const userTwo = await createUserAndAssert(t, api, userCredTwo);
+  t.context.createdUsers.push(userCredOne);
+  t.context.createdUsers.push(userCredTwo);
+
   const game = await createGameAndAssert(t, api, userCredOne, userOne);
   const room = await createRoomAndAssert(t, api, userCredOne, game, userOne);
   const roomOmitted = await createRoomAndAssert(t, api, userCredOne, game, userOne);
@@ -88,6 +99,8 @@ test('GET /room supports query by "containsInactivePlayer"', async (t) => {
     userCredOne, userTwo, userCredTwo, room, game,
   } = await startTicTacToeRoom(t);
   const authTokenTwo = await userCredTwo.user.getIdToken();
+  t.context.createdUsers.push(userCredOne);
+  t.context.createdUsers.push(userCredTwo);
 
   // only user two attempts to quit room, but because this triggers a finished room
   // user one also becomes an inactive player
@@ -114,25 +127,24 @@ test('GET /room supports query by "containsInactivePlayer"', async (t) => {
   t.is(statusUserTwo, StatusCodes.OK);
   t.assert(roomsUserTwoQuit.length === 1);
   t.assert(roomsUserTwoQuit[0].id === room.id);
-
-  await deleteUserAndAssert(t, api, userCredOne);
-  await deleteUserAndAssert(t, api, userCredTwo);
 });
 
 test('POST /room creates a room', async (t) => {
   const { api } = t.context.app;
   const userCred = await createUserCred();
   const user = await createUserAndAssert(t, api, userCred);
+  t.context.createdUsers.push(userCred);
+
   const game = await createGameAndAssert(t, api, userCred, user);
   await createRoomAndAssert(t, api, userCred, game, user);
-
-  await deleteUserAndAssert(t, api, userCred);
 });
 
 test('POST /room returns \'room.game must exist\' if no room', async (t) => {
   const { api } = t.context.app;
   const userCred = await createUserCred();
   await createUserAndAssert(t, api, userCred);
+  t.context.createdUsers.push(userCred);
+
   const authToken = await userCred.user.getIdToken();
   const { response: { status } } = await t.throwsAsync(
     api.post('/room', {
@@ -140,16 +152,13 @@ test('POST /room returns \'room.game must exist\' if no room', async (t) => {
     }, { headers: { authorization: authToken } }),
   );
   t.is(status, StatusCodes.BAD_REQUEST);
-
-  await deleteUserAndAssert(t, api, userCred);
 });
 
 test('POST /room/:id/join joins a game', async (t) => {
   const { api } = t.context.app;
   const { userCredOne, userCredTwo } = await startTicTacToeRoom(t);
-
-  await deleteUserAndAssert(t, api, userCredOne);
-  await deleteUserAndAssert(t, api, userCredTwo);
+  t.context.createdUsers.push(userCredOne);
+  t.context.createdUsers.push(userCredTwo);
 });
 
 test('POST /room/:id/join on a non joinable room provides a 400', async (t) => {
@@ -157,6 +166,8 @@ test('POST /room/:id/join on a non joinable room provides a 400', async (t) => {
   const { api } = t.context.app;
   const userCred = await createUserCred();
   await createUserAndAssert(t, api, userCred);
+  t.context.createdUsers.push(userCred);
+
   const authToken = await userCred.user.getIdToken();
 
   const { response: { status, data: { message, name } } } = await t.throwsAsync(api.post(`/room/${room.id}/join`, undefined, { headers: { authorization: authToken } }));
@@ -193,6 +204,9 @@ test('POST /room/:id/join on a finished room throws an error', async (t) => {
 
 test('POST /room/:id/move invokes creator backend to modify the game state', async (t) => {
   const { userCredOne, userCredTwo, room } = await startTicTacToeRoom(t);
+  t.context.createdUsers.push(userCredOne);
+  t.context.createdUsers.push(userCredTwo);
+
   const { api } = t.context.app;
   const authToken = await userCredOne.user.getIdToken();
 
@@ -212,13 +226,13 @@ test('POST /room/:id/move invokes creator backend to modify the game state', asy
     [null, null, null],
     [null, null, null]],
   board);
-
-  await deleteUserAndAssert(t, api, userCredOne);
-  await deleteUserAndAssert(t, api, userCredTwo);
 });
 
 test('POST /room/:id/move provides error if user code throws an error', async (t) => {
   const { userCredOne, userCredTwo, room } = await startTicTacToeRoom(t);
+  t.context.createdUsers.push(userCredOne);
+  t.context.createdUsers.push(userCredTwo);
+
   const { api } = t.context.app;
 
   // make move with user2 (it's user1's turn!)
@@ -227,9 +241,6 @@ test('POST /room/:id/move provides error if user code throws an error', async (t
     { x: 0, y: 0 },
     { headers: { authorization: authToken } }));
   t.is(status, StatusCodes.BAD_REQUEST);
-
-  await deleteUserAndAssert(t, api, userCredOne);
-  await deleteUserAndAssert(t, api, userCredTwo);
 });
 
 test('POST /room/:id/move provides error if user tries to make move when not in the room', async (t) => {
@@ -238,6 +249,9 @@ test('POST /room/:id/move provides error if user tries to make move when not in 
   const userCredTwo = await createUserCred();
   const userOne = await createUserAndAssert(t, api, userCredOne);
   await createUserAndAssert(t, api, userCredTwo);
+  t.context.createdUsers.push(userCredOne);
+  t.context.createdUsers.push(userCredTwo);
+
   const authTokenTwo = await userCredTwo.user.getIdToken();
   const game = await createGameAndAssert(t, api, userCredOne, userOne);
   const room = await createRoomAndAssert(t, api, userCredOne, game, userOne);
@@ -245,9 +259,6 @@ test('POST /room/:id/move provides error if user tries to make move when not in 
     { x: 0, y: 0 },
     { headers: { authorization: authTokenTwo } }));
   t.is(status, StatusCodes.BAD_REQUEST);
-
-  await deleteUserAndAssert(t, api, userCredOne);
-  await deleteUserAndAssert(t, api, userCredTwo);
 });
 
 test('POST /room/:id/move provides error if database fails', async (t) => {
@@ -262,10 +273,10 @@ test('POST /room/:id/move provides error if database fails', async (t) => {
       app: customApp,
     },
   });
-  const authToken = await userCredOne.user.getIdToken();
+  t.context.createdUsers.push(userCredOne);
+  t.context.createdUsers.push(userCredTwo);
 
-  await deleteUserAndAssert(t, api, userCredOne);
-  await deleteUserAndAssert(t, api, userCredTwo);
+  const authToken = await userCredOne.user.getIdToken();
 
   // forces any db transactions on the customApp to fail because db is no longer running
   await cleanupMongoDB();
@@ -283,6 +294,9 @@ test('POST /room/:id/quit user is no longer in the room, and is in inactivePlaye
   const {
     userOne, userTwo, userCredOne, userCredTwo, room,
   } = await startTicTacToeRoom(t);
+  t.context.createdUsers.push(userCredOne);
+  t.context.createdUsers.push(userCredTwo);
+
   const { api } = t.context.app;
   const authToken = await userCredOne.user.getIdToken();
 
@@ -309,9 +323,6 @@ test('POST /room/:id/quit user is no longer in the room, and is in inactivePlaye
     [null, null, null],
     [null, null, null]],
   board);
-
-  await deleteUserAndAssert(t, api, userCredOne);
-  await deleteUserAndAssert(t, api, userCredTwo);
 });
 
 test('POST /room/:id/quit provides error if user is not in the room', async (t) => {
@@ -320,6 +331,9 @@ test('POST /room/:id/quit provides error if user is not in the room', async (t) 
   const userCredTwo = await createUserCred();
   const userOne = await createUserAndAssert(t, api, userCredOne);
   const userTwo = await createUserAndAssert(t, api, userCredTwo);
+  t.context.createdUsers.push(userCredOne);
+  t.context.createdUsers.push(userCredTwo);
+
   const authTokenTwo = await userCredTwo.user.getIdToken();
   const game = await createGameAndAssert(t, api, userCredOne, userOne);
   const room = await createRoomAndAssert(t, api, userCredOne, game, userOne);
@@ -334,9 +348,6 @@ test('POST /room/:id/quit provides error if user is not in the room', async (t) 
       message: `${userTwo.id}: ${userTwo.username} is not in ${room.id}!`,
     },
   );
-
-  await deleteUserAndAssert(t, api, userCredOne);
-  await deleteUserAndAssert(t, api, userCredTwo);
 });
 
 test('POST /room/:id/quit on a finished room throws an error', async (t) => {
@@ -347,12 +358,12 @@ test('GET /room/:id returns a room', async (t) => {
   const { api } = t.context.app;
   const userCred = await createUserCred();
   const user = await createUserAndAssert(t, api, userCred);
+  t.context.createdUsers.push(userCred);
+
   const game = await createGameAndAssert(t, api, userCred, user);
   const room = await createRoomAndAssert(t, api, userCred, game, user);
   const { data, status } = await api.get(
     `/room/${room.id}`,
   );
   t.is(status, StatusCodes.OK);
-  
-  await deleteUserAndAssert(t, api, userCred);
 });
